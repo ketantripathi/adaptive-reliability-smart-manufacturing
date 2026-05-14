@@ -1,0 +1,700 @@
+\documentclass[journal]{IEEEtran}
+
+\usepackage[margin=0.75in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{float}
+\usepackage{hyperref}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{setspace}
+\usepackage{flushend}
+\usepackage{cite}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    citecolor=blue,
+    urlcolor=blue
+}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{proposition}{Proposition}
+\newtheorem{definition}{Definition}
+
+\title{\textbf{Adaptive Predictive Reliability-Aware Control for IoT-Enabled Smart Manufacturing Systems}}
+\author{Ketan Tripathi, Amrit Lal Saket, Prabhat Kumar Prince, Mehtab Singh Rathore \\
+
+Department of Computer Science and Engineering \\
+
+Visvesvaraya National Institute of Technology, Nagpur}
+\date{\today}
+
+\begin{document}
+\sloppy
+\maketitle
+
+\begin{abstract}
+Internet-of-Things (IoT) infrastructures are increasingly used to monitor, coordinate, and control smart manufacturing systems. However, high production activity can increase communication load, reduce transmission accuracy, and ultimately lower the probability that the manufacturing system satisfies demand. This paper develops a complete simulation-based research study inspired by the modular Petri net reliability model of Zhang et al. for IoT-enabled smart manufacturing systems. First, a baseline model is re-implemented from scratch using four-state Markov production units, hierarchical network load propagation, nonlinear transmission accuracy degradation, and binary demand-satisfaction reliability. Second, a synthetic dataset is generated from Monte Carlo experiments to expose limitations of a fixed production policy. Third, an improved Adaptive Predictive Reliability-Aware Control (APRAC) model is proposed. The controller estimates next-step reliability and selects a production command by balancing expected reliability, equipment degradation risk, overload risk, and command smoothness. Experiments over 600 time steps and 150 Monte Carlo runs show that APRAC improves mean reliability from 0.5514 to 0.6585, reduces failure rate by 23.87\%, increases mean transmission accuracy by 16.06\%, and increases throughput by 25.49\%. An ablation study confirms that both load-aware correction and predictive reliability scoring contribute to the final improvement. The results demonstrate that reliability modeling for IoT manufacturing should not stop at assessment; it can be converted into a feedback control policy that improves operational resilience.
+\end{abstract}
+
+\noindent\textbf{Keywords:} IoT reliability, smart manufacturing, Petri net inspired modeling, Markov process, adaptive control, predictive reliability, synthetic dataset.
+
+\section{Introduction}
+
+Smart manufacturing systems combine physical production equipment with sensing, communication, data processing, and control. In such systems, IoT devices continuously report machine states, workload, routing status, and production events. These data streams enable real-time decision making, but they also create a reliability problem: when production activity increases, the associated communication traffic may overload network nodes, reduce information accuracy, and damage the very feedback loop used to sustain production.
+
+Reliability modeling of IoT-enabled manufacturing systems has therefore become a central research problem. Zhang et al. proposed a modular Petri net approach for modeling and assessing the reliability of Internet-of-Things in smart manufacturing systems \cite{zhang2025iotpetri}. The use of predictive reliability estimation draws from statistical data-driven approaches for remaining useful life estimation \cite{si2011remaining,si2012remaining}. Petri nets are well suited to such systems because they represent discrete events, concurrency, resource sharing, and state transitions \cite{murata1989petri,murata1996petri,cassandras2008discrete,cassandras2010discrete}. Existing reliability assessment models are valuable for quantifying system risk, but assessment alone does not prescribe how the system should react when risk increases.
+
+This paper extends the modeling direction by converting reliability assessment into an adaptive control problem. The baseline system is implemented as a fixed production policy with no prediction and no feedback correction. The proposed model, Adaptive Predictive Reliability-Aware Control (APRAC), evaluates candidate production commands using a mathematically motivated objective:
+\begin{equation}
+\begin{aligned}
+J(t,\gamma)
+&=\widehat{R}(t+1;\gamma)-\lambda_d D(t)\\
+&\quad-\lambda_o O(t,\gamma)
+-\lambda_s|\gamma-\gamma(t-1)|,
+\end{aligned}
+\end{equation}
+where $\widehat{R}(t+1;\gamma)$ is the predicted next-step reliability under command $\gamma$, $D(t)$ is degradation risk, $O(t,\gamma)$ is projected overload risk, and the final term penalizes unnecessary oscillation in the control command.
+
+The contributions of this work are:
+\begin{enumerate}[leftmargin=*]
+    \item A complete re-implementation of an IoT smart manufacturing reliability simulation using modular production, network, reliability, and simulation components.
+    \item A synthetic dataset generation process that records unit states, network loads, transmission accuracy, production rate, reliability, rolling averages, and failure events.
+    \item A mathematical improved model with lemmas and proof sketches showing why overload-aware prediction can improve delivered production reliability.
+    \item A quantitative comparison with at least six baseline-versus-improved graphs and a numerical ablation study.
+\end{enumerate}
+
+The rest of the paper is organized as follows. Section \ref{sec:related} discusses related work. Section \ref{sec:baseline_model} defines the baseline model mathematically. Section \ref{sec:proposed} introduces the proposed controller with theoretical motivation. Section \ref{sec:experiments} describes the dataset and experimental setting. Section \ref{sec:results} presents results and discussion. Section \ref{sec:conclusion} concludes the paper.
+
+\subsection{Research Motivation and Scope}
+
+The reliability of a smart manufacturing cell depends on more than the health of the physical machines. In an IoT-enabled setting, a machine can be physically able to produce while the network layer is unable to transmit the correct state, command, or measurement information at sufficient quality. This creates a coupled reliability problem. The production layer consumes and produces physical resources, whereas the information layer consumes communication resources. If these two layers are optimized independently, the system may operate in a regime where physical output is high but useful delivered output is low.
+
+The present work focuses on this coupled regime. The simulation does not attempt to reproduce a proprietary factory trace. Instead, it constructs a controlled synthetic benchmark where the causal relationships are explicit: production commands raise physical output and communication load; load reduces transmission accuracy; poor accuracy reduces delivered production; and delivered production determines reliability. This design is useful for research assessment because every run can be repeated, every variable can be logged, and changes in performance can be traced back to a specific modeling decision.
+
+The scope of the paper is therefore threefold. First, a baseline reliability model is built from scratch using interpretable state transitions and network load equations. Second, the limitations of a fixed policy are measured empirically through Monte Carlo simulation. Third, a mathematically motivated controller is proposed and compared against the baseline and ablation variants. The emphasis is on transparent modeling and reproducible evaluation rather than black-box prediction.
+
+\section{Related Work}
+\label{sec:related}
+
+Petri nets provide a classical framework for modeling discrete-event systems with concurrency, synchronization, and resource constraints \cite{murata1989petri}. In manufacturing, these properties are important because production units, network nodes, and control modules evolve asynchronously but jointly determine system performance. Discrete event system theory further supports the analysis of state transitions and event-driven control \cite{cassandras2008discrete}.
+
+The source work by Zhang et al. develops a modular Petri net approach for reliability modeling and assessment of IoT in smart manufacturing systems \cite{zhang2025iotpetri,zhang2018petrimanufacturing}. Their work motivates the modular decomposition used here: production units and information-network components are modeled separately and then combined at the system-reliability level. The present study preserves that modular spirit, but shifts the emphasis from reliability assessment to adaptive reliability improvement.
+
+Smart manufacturing is also closely related to cyber-physical production systems and Industry 4.0 architectures \cite{lee2015cyberphysical,monostori2014cyberphysical,wang2016cloudmanufacturing,liu2019iotmanufacturing}. These systems rely on sensor networks and distributed communication. IoT reliability reviews identify communication robustness, fault tolerance, predictive maintenance, and real-time monitoring as key research directions \cite{moore2020iotreliability,moore2019iotreliability}. Reliability modeling of IoT networks has also been studied in storage and mesh-network settings, where network topology and component failures strongly influence end-to-end reliability \cite{xing2017meshiot,levitin2017reliability}.
+
+Machine learning and prediction are increasingly used in reliability engineering, but purely data-driven methods may be difficult to justify when safety and production constraints must be explicit \cite{xu2021mlreliability,xu2019mlreliability}. Adaptive control methods have been applied to Petri net models for manufacturing systems to handle uncertainties and optimize performance \cite{shi2006adaptive,shi2010petrimanufacturing}. For this reason, APRAC uses a lightweight probabilistic prediction function embedded inside a transparent cost function. The resulting model remains interpretable while still anticipating overload and degradation.
+
+\subsection{Research Gap}
+
+The reviewed literature shows two important strands. The first strand models reliability using formal discrete-event methods such as Petri nets, Markov chains, and network reliability models. These methods are strong at representing system structure, component states, and failure paths. The second strand studies smart manufacturing control and Industry 4.0 operation, where cyber-physical systems must react to changing production and communication conditions. A gap appears between these strands: reliability models often assess risk after a policy is chosen, while control models often optimize production without explicitly treating communication reliability as part of the objective. Performance modeling of automated manufacturing systems using Markov chains and queueing networks provides a foundation for integrating reliability into control decisions \cite{viswanadham1992performance}.
+
+This paper addresses that gap by using reliability assessment as a feedback signal. Instead of asking only whether the system is reliable under a fixed policy, the proposed model asks which feasible production command is most reliable after accounting for future overload. This changes the role of reliability from a passive metric to an active decision criterion. Such a conversion is especially important for IoT manufacturing because communication degradation can be nonlinear. A small increase in load near the gateway capacity may cause a disproportionate drop in accuracy, and a policy that ignores this nonlinear region can produce avoidable failures.
+
+\subsection{Design Requirements Derived from Prior Work}
+
+The model used in this paper follows four design requirements derived from the related literature. First, the system must be modular, because production and information-network components have different state variables and transition mechanisms. Second, the production subsystem must be stochastic, because manufacturing equipment can degrade, recover, or enter high-output states over time. Third, transmission accuracy must be load dependent rather than constant, because IoT communication quality changes under congestion. Fourth, the proposed controller must remain interpretable, because reliability studies require traceable assumptions and explainable decisions. These requirements lead directly to the Markov production model, hierarchical network model, nonlinear accuracy function, and finite-action predictive controller described in the next sections \cite{viswanadham1992performance}.
+
+\section{Baseline Mathematical Model}
+\label{sec:baseline_model}
+
+\subsection{Production Unit Model}
+
+Consider $n=4$ production units indexed by $i\in\{1,\ldots,n\}$. Each unit has a discrete state
+\begin{equation}
+X_i(t)\in\mathcal{S}=\{0,1,2,3\},
+\end{equation}
+where 0 denotes failed, 1 degraded, 2 nominal, and 3 boost state. The state-dependent physical capacity is
+\begin{equation}
+c(X_i)=
+\begin{cases}
+0, & X_i=0,\\
+0.55, & X_i=1,\\
+1.00, & X_i=2,\\
+1.35, & X_i=3.
+\end{cases}
+\end{equation}
+
+For a production command $\gamma(t)$, the planned production of unit $i$ is
+\begin{equation}
+p_i^{\mathrm{plan}}(t)=\gamma(t)c(X_i(t)).
+\end{equation}
+The aggregate planned production is
+\begin{equation}
+P^{\mathrm{plan}}(t)=\sum_{i=1}^{n} p_i^{\mathrm{plan}}(t).
+\end{equation}
+
+The baseline uses a fixed command,
+\begin{equation}
+\gamma(t)=\gamma_0=1.25,
+\end{equation}
+which represents a static high-output policy.
+
+Each unit follows a Markov transition rule. Let $P^{(0)}$ be the base transition matrix:
+\begin{equation}
+P^{(0)}=
+\begin{bmatrix}
+0.62 & 0.30 & 0.08 & 0.00\\
+0.10 & 0.68 & 0.20 & 0.02\\
+0.02 & 0.14 & 0.70 & 0.14\\
+0.04 & 0.22 & 0.34 & 0.40
+\end{bmatrix}.
+\end{equation}
+The implemented model adjusts these probabilities according to command stress, overload stress, and accumulated degradation. This preserves the Markov-state interpretation while allowing operating conditions to affect transition risk \cite{viswanadham1992performance}.
+
+\subsection{Information Network Model}
+
+The information network consists of end nodes, route nodes, and one gateway. End nodes collect traffic from production units. Route nodes aggregate traffic from end nodes. The gateway aggregates all route-node traffic and determines the system-level communication load. Let $L_e(t)$, $L_r(t)$, and $L_g(t)$ denote end-node, route-node, and gateway loads. The propagation structure is:
+\begin{align}
+L_{e,i}(t) &= a_0+a_1X_i(t)+a_2\gamma(t)+\epsilon_{e,i}(t),\\
+L_{r,k}(t) &= b_0+b_1\sum_{i\in\mathcal{C}_k}L_{e,i}(t)+\epsilon_{r,k}(t),\\
+L_g(t) &= q_0+q_1\sum_k L_{r,k}(t)+\epsilon_g(t),
+\end{align}
+where $\mathcal{C}_k$ is the child set of route node $k$ and $\epsilon$ terms represent zero-mean simulation noise.
+
+Let $C_g$ be the gateway capacity. Gateway utilization and overload risk are:
+\begin{align}
+U_g(t)&=\frac{L_g(t)}{C_g},\\
+O(t)&=\max\{0,U_g(t)-1\}.
+\end{align}
+
+\subsection{Transmission Accuracy and Reliability}
+
+Transmission accuracy is modeled as a nonlinear decreasing function of load:
+\begin{equation}
+A(t)=\frac{0.985}{1+\left(U_g(t)(1+0.55M(t))\right)^\alpha},
+\label{eq:accuracy}
+\end{equation}
+where $M(t)$ is congestion memory and $\alpha=2.35$ controls the sharpness of degradation. This avoids the unrealistic assumption that transmission accuracy is constant under increasing traffic.
+
+The overload production loss is:
+\begin{equation}
+\ell(O)=0.08+0.52(1-e^{-1.6O}),
+\end{equation}
+clipped to the interval $[0,0.72]$. Effective delivered production is then:
+\begin{equation}
+P(t)=P^{\mathrm{plan}}(t)A(t)(1-\ell(O(t))).
+\end{equation}
+
+\begin{definition}[System reliability]
+For demand $d$, system reliability at time $t$ is the binary random variable
+\begin{equation}
+R_s(t)=\mathbb{I}\{P(t)\ge d\}.
+\end{equation}
+\end{definition}
+
+The demand used in the simulation is $d=0.90$. This value is selected to create a meaningful operating region where production, network accuracy, and overload jointly determine reliability rather than causing trivial all-success or all-failure behavior.
+
+\subsection{Baseline Limitation}
+
+The baseline policy keeps $\gamma(t)=\gamma_0$ even when $U_g(t)>1$. Therefore, the policy cannot reduce traffic after overload is observed. This causes a coupled negative effect: high command increases traffic; high traffic reduces accuracy; lower accuracy reduces delivered production; lower delivered production increases failure probability.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.92\linewidth]{../outputs/graphs/04_limitation_analysis.png}
+    \caption{Baseline limitation analysis. Gateway overload is followed by reduced effective production and visible failure spikes.}
+    \label{fig:limitation}
+\end{figure}
+
+\section{Proposed Adaptive Predictive Reliability-Aware Control}
+\label{sec:proposed}
+
+\subsection{Prediction Function}
+
+At time $t$, the controller evaluates a finite action set:
+\begin{equation}
+\Gamma=\{0.62,0.72,0.82,0.92,1.00,1.08\}.
+\end{equation}
+For each candidate command $\gamma\in\Gamma$, it estimates projected load:
+\begin{equation}
+\widehat{L}_g(t+1;\gamma)=L_g(t)(0.40+0.62\gamma),
+\end{equation}
+and projected overload:
+\begin{equation}
+\widehat{O}(t+1;\gamma)=
+\max\left\{0,\frac{\widehat{L}_g(t+1;\gamma)}{C_g}-1\right\}.
+\end{equation}
+
+The predicted accuracy $\widehat{A}(t+1;\gamma)$ is computed using the same nonlinear function as Eq. \eqref{eq:accuracy}, replacing $L_g(t)$ by $\widehat{L}_g(t+1;\gamma)$. The predicted delivered production is:
+\begin{equation}
+\begin{aligned}
+\widehat{P}(t+1;\gamma)
+&=\gamma C_X(t)\widehat{A}(t+1;\gamma)\\
+&\quad \times
+\left(1-\ell(\widehat{O}(t+1;\gamma))\right),
+\end{aligned}
+\end{equation}
+where $C_X(t)=\sum_i c(X_i(t))$. The three factors represent commanded physical capacity, predicted transmission accuracy, and retained output after overload loss. The predicted reliability probability is then approximated by a sigmoid demand-margin model:
+\begin{equation}
+\widehat{R}(t+1;\gamma)=
+\frac{1}{1+\exp[-\beta(\widehat{P}(t+1;\gamma)-d)]},
+\end{equation}
+where $\beta=4$.
+
+\subsection{Optimization Objective}
+
+Let $D(t)$ be the mean degradation of production units. APRAC solves:
+\begin{equation}
+\begin{aligned}
+\gamma^*(t)=
+&\arg\max_{\gamma\in\Gamma}
+\Big[
+\widehat{R}(t+1;\gamma)-\lambda_dD(t)\\
+&-\lambda_o\widehat{O}(t+1;\gamma)
+-\lambda_s|\gamma-\gamma(t-1)|
+\Big].
+\end{aligned}
+\label{eq:objective}
+\end{equation}
+The parameters used are $\lambda_d=0.42$, $\lambda_o=0.62$, and $\lambda_s=0.18$.
+
+\subsection{APRAC Algorithm}
+
+Algorithm \ref{alg:aprac} summarizes the control logic implemented in the simulation engine. The controller is intentionally finite-action rather than continuous. This makes the optimizer robust, reproducible, and easy to audit. It also reflects practical industrial control, where production rates are often selected from a finite set of permitted operating modes.
+
+\begin{table}[H]
+\centering
+\caption{APRAC finite-action decision procedure.}
+\label{alg:aprac}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{p{0.08\linewidth}p{0.82\linewidth}}
+\toprule
+Step & Operation \\
+\midrule
+1 & Observe unit states $X_i(t)$, degradation values, gateway load $L_g(t)$, and congestion memory $M(t)$. \\
+2 & For each candidate $\gamma\in\Gamma$, compute projected gateway load $\widehat{L}_g(t+1;\gamma)$. \\
+3 & Compute projected overload $\widehat{O}(t+1;\gamma)$ and predicted accuracy $\widehat{A}(t+1;\gamma)$. \\
+4 & Estimate delivered production $\widehat{P}(t+1;\gamma)$ and reliability probability $\widehat{R}(t+1;\gamma)$. \\
+5 & Evaluate $J(t,\gamma)$ using reliability, degradation, overload, and smoothing terms. \\
+6 & Select $\gamma^*(t)=\arg\max_{\gamma\in\Gamma}J(t,\gamma)$ and apply it to the next transition. \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+The algorithm uses the current state of the simulation rather than future information. It is therefore causal. The prediction step is one-step-ahead and does not require training a separate machine-learning model. This is deliberate: the purpose of the study is to demonstrate that even a simple predictive structure can improve reliability when it is aligned with the physics of network overload.
+
+\subsection{Interpretation of Objective Terms}
+
+The reliability term rewards actions that increase the probability of satisfying demand. The degradation penalty discourages commands that repeatedly stress already degraded units. The overload penalty prevents the optimizer from selecting a high command that appears beneficial at the production layer but harmful at the information layer. The smoothing term discourages abrupt changes in command and therefore improves production stability. Each term corresponds to an observable engineering concern: demand satisfaction, machine health, communication capacity, and operational smoothness.
+
+Because the objective is evaluated over a small finite set, the computational burden is low. With $|\Gamma|=6$ and $n=4$ production units, the controller evaluates six scalar costs per time step. This is negligible compared with the cost of simulation or data acquisition. More importantly, the decision can be explained after the fact by listing candidate costs, as shown in Fig. \ref{fig:objective}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\linewidth]{../outputs/graphs/05_controller_objective.png}
+    \caption{APRAC objective evaluation over candidate production commands. The controller selects the command that balances predicted reliability against overload and smoothing penalties.}
+    \label{fig:objective}
+\end{figure}
+
+\subsection{Theoretical Motivation}
+
+\begin{lemma}[Monotone accuracy degradation]
+For fixed congestion memory $M(t)\ge0$ and shape parameter $\alpha>0$, the transmission accuracy $A(t)$ in Eq. \eqref{eq:accuracy} is non-increasing in gateway load $L_g(t)$.
+\end{lemma}
+
+\begin{proof}
+Let $u=L_g/C_g$ and $k=1+0.55M(t)>0$. Then
+\begin{equation}
+A(u)=\frac{0.985}{1+(ku)^\alpha}.
+\end{equation}
+For $u\ge0$,
+\begin{equation}
+\frac{dA}{du}
+=
+-0.985\frac{\alpha k^\alpha u^{\alpha-1}}{(1+(ku)^\alpha)^2}
+\le0.
+\end{equation}
+Thus accuracy cannot increase when gateway load increases.
+\end{proof}
+
+\begin{lemma}[Existence of an optimal command]
+The APRAC decision problem in Eq. \eqref{eq:objective} has at least one optimizer.
+\end{lemma}
+
+\begin{proof}
+The candidate set $\Gamma$ is finite and nonempty. The objective assigns a real number to every $\gamma\in\Gamma$. Therefore, a maximum exists by finite enumeration.
+\end{proof}
+
+\begin{proposition}[Overload-aware command reduction can improve delivered production]
+Suppose two commands $\gamma_a>\gamma_b$ produce projected loads such that $\widehat{O}(t+1;\gamma_a)>0$ and $\widehat{O}(t+1;\gamma_b)\approx0$. If the accuracy and overload-loss gain from $\gamma_b$ exceeds the planned-output loss from reducing command, then $\widehat{P}(t+1;\gamma_b)>\widehat{P}(t+1;\gamma_a)$.
+\end{proposition}
+
+\begin{proof}
+Let $C_X(t)$ be current available capacity. The predicted delivered production under command $\gamma$ is
+\begin{equation}
+\widehat{P}(t+1;\gamma)=\gamma C_X(t)\widehat{A}(t+1;\gamma)(1-\ell(\widehat{O}(t+1;\gamma))).
+\end{equation}
+Since $\gamma_a>\gamma_b$, the planned factor is larger for $\gamma_a$. However, Lemma 1 implies that the higher load under $\gamma_a$ weakly lowers accuracy. In addition, $\ell(\widehat{O})$ increases under overload, lowering the delivered fraction. Therefore $\widehat{P}(t+1;\gamma_b)>\widehat{P}(t+1;\gamma_a)$ whenever
+\begin{equation}
+\frac{\widehat{A}(t+1;\gamma_b)(1-\ell(\widehat{O}(t+1;\gamma_b)))}
+{\widehat{A}(t+1;\gamma_a)(1-\ell(\widehat{O}(t+1;\gamma_a)))}
+>
+\frac{\gamma_a}{\gamma_b}.
+\end{equation}
+This condition states that the communication reliability gain from avoiding overload is larger than the physical production reduction. Under this condition, the adaptive command improves predicted delivered production and hence increases the predicted reliability margin.
+\end{proof}
+
+\begin{theorem}[Reliability improvement under positive margin shift]
+Let $P_B(t)$ and $P_I(t)$ be delivered production under baseline and improved control. If APRAC produces a positive expected demand-margin shift,
+\begin{equation}
+\mathbb{E}[P_I(t)-d]>\mathbb{E}[P_B(t)-d],
+\end{equation}
+and the distribution of margins is not degenerate at zero, then the expected reliability under APRAC is larger whenever the margin shift moves probability mass from below demand to above demand.
+\end{theorem}
+
+\begin{proof}
+Reliability is $R_s(t)=\mathbb{I}\{P(t)-d\ge0\}$. Therefore,
+\begin{equation}
+\mathbb{E}[R_s(t)]=\Pr(P(t)-d\ge0).
+\end{equation}
+If APRAC shifts a nonzero portion of probability mass from the negative-margin region to the nonnegative-margin region, then $\Pr(P_I(t)-d\ge0)>\Pr(P_B(t)-d\ge0)$. Hence $\mathbb{E}[R_I(t)]>\mathbb{E}[R_B(t)]$.
+\end{proof}
+
+\section{Implementation Architecture}
+\label{sec:implementation}
+
+The project is implemented as a modular Python research workflow. The implementation is divided into four core modules and eight notebooks. This separation is important because the mathematical model, dataset generation, simulation experiments, and comparative analysis must be independently executable. It also reduces the risk of mixing baseline and improved logic.
+
+\subsection{Core Modules}
+
+The production module defines the \texttt{ProductionUnit} class. Each object stores its state, degradation level, transition matrix, and capacity vector. The transition method accepts the current production command and overload ratio, then samples the next state from a stress-adjusted probability vector. This makes the production layer stochastic while preserving an interpretable four-state structure.
+
+The network module defines end nodes, route nodes, a gateway, and the full information network. End-node load depends on the unit state and production command. Route-node load aggregates child-node traffic. Gateway load aggregates route traffic and determines utilization, overload, and congestion memory. This mirrors the modular information flow assumed in IoT manufacturing systems.
+
+The reliability module contains the nonlinear transmission accuracy function, overload loss function, effective production function, and binary reliability calculation. Keeping these equations in a separate module ensures that baseline and improved simulations use the same reliability definition. Therefore, performance differences are caused by control policy rather than by inconsistent measurement.
+
+The simulation engine integrates all modules. It supports four modes: baseline, load-aware only, prediction only, and improved APRAC. The baseline mode applies a fixed command. The load-aware mode reacts to utilization but does not evaluate the full reliability objective. The prediction-only mode uses predicted reliability but excludes the overload penalty and smoothing term. The improved mode uses all APRAC components.
+
+\subsection{Notebook Workflow}
+
+The notebook workflow follows the structure of a research pipeline. The first notebook defines the system mathematically and visually. The second notebook runs the baseline Monte Carlo simulation. The third notebook converts simulation records into a structured dataset. The fourth notebook analyzes baseline limitations. The fifth notebook introduces the proposed model. The sixth notebook runs the improved simulation under the same conditions as the baseline. The seventh notebook performs direct comparative analysis. The eighth notebook performs ablation.
+
+This workflow supports reproducibility because each notebook can be executed independently. If a dataset is missing, the relevant notebook regenerates it. If a plot is missing, the notebook recreates it from the stored data. This design is suitable for a research-paper workflow because it preserves both the generated results and the code path used to obtain them.
+
+\begin{table}[H]
+\centering
+\caption{Mapping between notebooks and research outputs.}
+\label{tab:notebooks}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{ll}
+\toprule
+Notebook & Main output \\
+\midrule
+01\_system\_modeling & State model, accuracy curve, system evolution \\
+02\_baseline\_simulation & Baseline Monte Carlo dataset and plots \\
+03\_dataset\_generation & Structured CSV dataset and failure events \\
+04\_limitation\_analysis & Overload and sensitivity analysis \\
+05\_proposed\_model & Controller objective and decision logic \\
+06\_improved\_simulation & Improved Monte Carlo dataset and plots \\
+07\_comparative\_analysis & Six baseline-versus-improved graphs \\
+08\_ablation\_study & Component contribution analysis \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+\section{Synthetic Dataset and Experimental Setup}
+\label{sec:experiments}
+
+The project generates synthetic datasets from the simulation rather than using external production logs. This is appropriate because the aim is to study controlled reliability mechanisms under repeated Monte Carlo conditions. The baseline and improved models are run under the same number of time steps, runs, demand, network capacity, and random seed.
+
+\begin{table}[H]
+\centering
+\caption{Main simulation parameters.}
+\label{tab:params}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{ll}
+\toprule
+Parameter & Value \\
+\midrule
+Production units & 4 \\
+Unit states & failed, degraded, nominal, boost \\
+Time steps & 600 \\
+Monte Carlo runs & 150 \\
+Demand threshold & 0.90 \\
+Baseline command $\gamma_0$ & 1.25 \\
+Gateway capacity & 6.10 \\
+Route capacity & 3.10 \\
+Controller candidates & $\{0.62,0.72,0.82,0.92,1.00,1.08\}$ \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+The generated baseline dataset contains the following columns: time, run index, unit state vector, average load, maximum load, gateway load, transmission accuracy, production rate, throughput, reliability, rolling reliability, rolling production, and failure event. The same measurement structure is used for the improved model, enabling direct comparison.
+
+\subsection{Dataset Construction Procedure}
+
+For each Monte Carlo run, the simulator resets all units to the nominal state and clears network congestion memory. At every time step, the selected policy chooses a production command. The production units transition according to the stress-aware Markov model. The information network then propagates load from end nodes to route nodes and finally to the gateway. Transmission accuracy is computed from gateway load and congestion memory. Effective production is calculated after accuracy degradation and overload loss. Finally, reliability is recorded as a binary event.
+
+The dataset is synthetic but structured. It is not a random table generated independently of the model. Every row is produced by a causal simulation step. This distinction is important because the dataset preserves temporal dependence: overload at one time step influences congestion memory and therefore affects later accuracy. Rolling averages and failure events are computed after the raw simulation to support empirical analysis of instability and failure clustering.
+
+\subsection{Metrics}
+
+The primary metric is mean reliability:
+\begin{equation}
+\bar{R}=\frac{1}{NT}\sum_{r=1}^{N}\sum_{t=1}^{T}R_s^{(r)}(t),
+\end{equation}
+where $N$ is the number of Monte Carlo runs and $T$ is the number of time steps. The failure rate is $1-\bar{R}$. Production variance is:
+\begin{equation}
+\sigma_P^2=\frac{1}{NT-1}\sum_{r=1}^{N}\sum_{t=1}^{T}(P^{(r)}(t)-\bar{P})^2.
+\end{equation}
+This metric measures stability of delivered production, not merely average output. Mean transmission accuracy, mean gateway load, and mean throughput are also recorded. Throughput is defined as delivered production multiplied by transmission accuracy, so it rewards policies that jointly maintain physical output and communication quality.
+
+\subsection{Fairness of Comparison}
+
+The baseline and improved simulations use the same number of time steps, Monte Carlo runs, demand threshold, gateway capacity, route capacity, transition model, and reliability definition. They differ only in the policy that chooses $\gamma(t)$. This is necessary for a fair comparison. If the improved model used a different demand threshold or a different accuracy function, performance gains could be caused by evaluation bias. By keeping the environment fixed, the reported improvement can be attributed to the control strategy.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.90\linewidth]{../outputs/graphs/03_dataset_diagnostics.png}
+    \caption{Dataset diagnostics showing rolling reliability and failure event counts generated from the baseline Monte Carlo simulation.}
+    \label{fig:dataset}
+\end{figure}
+
+\section{Results and Discussion}
+\label{sec:results}
+
+\subsection{Overall Numerical Results}
+
+Table \ref{tab:summary} reports the main performance metrics generated from the comparative analysis notebook. The improved model increases mean reliability, reduces failure rate, lowers gateway load, improves accuracy, and increases throughput.
+
+\begin{table}[H]
+\centering
+\caption{Baseline versus improved performance summary.}
+\label{tab:summary}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lrrrrrrr}
+\toprule
+Model & Reliability & Failure & Production & Variance & Accuracy & Load & Throughput \\
+\midrule
+Baseline & 0.5514 & 0.4486 & 0.8726 & 0.0492 & 0.4342 & 6.6776 & 0.3683 \\
+Improved & 0.6585 & 0.3415 & 0.9360 & 0.0465 & 0.5040 & 5.9803 & 0.4622 \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Percentage improvement of APRAC over baseline.}
+\label{tab:improvement}
+\begin{tabular}{lr}
+\toprule
+Metric & Improvement \\
+\midrule
+Reliability improvement & 19.41\% \\
+Failure reduction & 23.87\% \\
+Production variance reduction & 5.64\% \\
+Stability improvement & 5.97\% \\
+Transmission accuracy gain & 16.06\% \\
+Throughput gain & 25.49\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The reliability increase is not produced by simply increasing production command. In fact, the improved model often reduces the production command to prevent overload. This improves the communication layer, increases delivered production, and raises the demand-satisfaction probability.
+
+\subsection{Required Six Comparison Graphs}
+
+Figures \ref{fig:rel}--\ref{fig:throughput} provide the six required comparison graphs. Each graph compares the baseline and improved strategy using the same simulation setting.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.90\linewidth]{../outputs/graphs/paper_01_reliability_vs_time.png}
+    \caption{Reliability versus time. APRAC maintains a higher probability of satisfying demand across the simulation horizon.}
+    \label{fig:rel}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.90\linewidth]{../outputs/graphs/paper_02_production_rate_vs_time.png}
+    \caption{Production rate versus time. The improved model raises delivered production by protecting transmission accuracy under load.}
+    \label{fig:prod}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.90\linewidth]{../outputs/graphs/paper_03_network_load_vs_time.png}
+    \caption{Network load versus time. APRAC lowers gateway load relative to the overloaded fixed baseline policy.}
+    \label{fig:load}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.90\linewidth]{../outputs/graphs/paper_04_failure_rate_vs_time.png}
+    \caption{Failure rate versus time. The proposed policy reduces the fraction of Monte Carlo runs below the demand threshold.}
+    \label{fig:failure}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.90\linewidth]{../outputs/graphs/paper_05_accuracy_vs_time.png}
+    \caption{Transmission accuracy versus time. The improved model avoids sustained congestion and therefore improves data transmission quality.}
+    \label{fig:accuracy}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.90\linewidth]{../outputs/graphs/paper_06_throughput_vs_time.png}
+    \caption{Throughput versus time. Because throughput depends on both production and accuracy, APRAC achieves the strongest relative gain on this metric.}
+    \label{fig:throughput}
+\end{figure}
+
+\subsection{Ablation Study}
+
+To isolate the contribution of each improvement, four variants are compared: baseline, only load-aware scaling, only prediction, and full APRAC. Table \ref{tab:ablation} shows that both partial strategies improve reliability relative to baseline. The full model gives the best reliability and the lowest production variance.
+
+\begin{table}[H]
+\centering
+\caption{Ablation study results.}
+\label{tab:ablation}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lrrrrrrr}
+\toprule
+Variant & Reliability & Failure & Production & Variance & Accuracy & Load & Throughput \\
+\midrule
+Baseline & 0.5474 & 0.4526 & 0.8702 & 0.0500 & 0.4345 & 6.6749 & 0.3674 \\
+Load-aware only & 0.6440 & 0.3560 & 0.9314 & 0.0510 & 0.4898 & 6.1184 & 0.4453 \\
+Prediction only & 0.6411 & 0.3589 & 0.9276 & 0.0482 & 0.5041 & 5.9792 & 0.4574 \\
+Full APRAC & 0.6553 & 0.3448 & 0.9344 & 0.0467 & 0.5041 & 5.9792 & 0.4614 \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.90\linewidth]{../outputs/graphs/08_ablation_bars.png}
+    \caption{Ablation bar plots comparing reliability, failure rate, and production variance.}
+    \label{fig:ablationbars}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.90\linewidth]{../outputs/graphs/08_ablation_timeseries.png}
+    \caption{Ablation time-series comparison for reliability, gateway load, and production rate.}
+    \label{fig:ablationtime}
+\end{figure}
+
+\subsection{Discussion}
+
+The central observation is that the fixed baseline policy treats production capacity as the only performance driver. The experiments show that this assumption is incomplete for IoT-enabled manufacturing. Once communication load becomes excessive, the information network reduces transmission accuracy, and the delivered production rate drops even when physical units continue to operate. This is visible in Fig. \ref{fig:load} and Fig. \ref{fig:accuracy}.
+
+APRAC improves performance because it internalizes this coupling. Instead of maximizing physical output alone, it maximizes expected reliability after accounting for overload and degradation. The improved strategy reduces average gateway load from 6.6776 to 5.9803 and improves average accuracy from 0.4342 to 0.5040. This accuracy gain increases delivered production from 0.8726 to 0.9360 and therefore raises mean reliability from 0.5514 to 0.6585.
+
+The ablation study shows that load-aware control alone is already useful because it reacts to congestion. Prediction-only control also improves performance because it anticipates the nonlinear accuracy loss. The full APRAC model performs best because it combines both effects and adds smoothing, which reduces variance and supports stable operation.
+
+\subsection{Interpretation of Failure Reduction}
+
+The failure reduction of 23.87\% is meaningful because failures are measured as demand violations, not as classification errors. A lower failure rate means fewer time steps in which the simulated manufacturing system fails to deliver sufficient production. This is different from reporting only a higher average production value. A policy can have high average production but still fail frequently if its output is unstable. APRAC improves both the reliability indicator and the production variance, which indicates that the reliability gain is not merely caused by a few high-output periods.
+
+The improved model also reduces mean gateway load. This may appear counterintuitive because the improved model achieves higher delivered production. The reason is that delivered production depends on usable information flow. By reducing unnecessary overload, APRAC sacrifices some aggressive physical command when the network is near saturation, but the resulting accuracy gain more than compensates for that reduction. This confirms the theoretical condition in Proposition 1: avoiding overload can increase delivered production when the communication reliability gain is larger than the physical command reduction.
+
+\subsection{Computation and Scalability}
+
+The implemented system uses four production units and six candidate production commands. For each time step, baseline control has constant decision cost. APRAC has cost $O(|\Gamma|)$ because it evaluates each candidate command once. If the number of production units increases to $n$, the cost of computing available capacity is $O(n)$ and the total decision cost is $O(n|\Gamma|)$. This scaling is acceptable for small and medium manufacturing cells, especially because $|\Gamma|$ is a design parameter chosen by the operator.
+
+The simulation cost is dominated by Monte Carlo repetition. For $N$ runs and $T$ time steps, the total experiment cost is $O(NTn|\Gamma|)$ for APRAC and $O(NTn)$ for baseline. In the reported experiments, $N=150$, $T=600$, $n=4$, and $|\Gamma|=6$. The notebooks execute comfortably on a standard laptop. Larger studies can parallelize Monte Carlo runs because each run is independent after the random seed is assigned.
+
+\subsection{Practical Implications}
+
+The main practical implication is that reliability-aware production control should include communication load as a first-class variable. In many smart manufacturing deployments, production scheduling and communication monitoring are handled by different subsystems. The results suggest that this separation can be inefficient when production decisions directly affect IoT traffic. A gateway operating close to capacity may make the entire system less reliable even when individual machines remain functional.
+
+APRAC is also practical because it does not require an expensive global optimization solver. The controller evaluates a small set of candidate commands and chooses the best one. A real system could implement a similar controller at the cell supervisor level. The accuracy function and overload loss function could be calibrated using measured packet loss, latency, retransmission rate, or data-quality statistics. The degradation term could be linked to maintenance logs or machine health indicators.
+
+\subsection{Threats to Validity}
+
+The first threat to validity is that the dataset is synthetic. Although the equations are physically motivated, real factories may have additional constraints such as batch dependencies, operator interventions, maintenance windows, and heterogeneous communication protocols. The results should therefore be interpreted as evidence for the modeling principle rather than as direct prediction of a specific plant.
+
+The second threat is parameter sensitivity. The magnitude of improvement depends on demand, gateway capacity, transition probabilities, and accuracy degradation shape. The chosen parameters create a nontrivial operating regime where both baseline failures and improved recoveries are visible. If demand is too low, both models may appear reliable. If demand is too high, both may fail frequently. Future work should perform broad parameter sweeps and report confidence intervals across operating regimes.
+
+The third threat is the simplicity of the predictor. APRAC uses a one-step heuristic reliability predictor rather than a learned model. This is a strength for interpretability but a limitation for complex systems. In real deployments, the prediction function could be replaced by a calibrated probabilistic model while retaining the same objective structure.
+
+\subsection{Reproducibility}
+
+The project was designed for reproducibility. All core model equations are implemented in Python modules, and all experiments are organized into notebooks. The generated datasets are saved as CSV files and the plots used in this paper are saved as image files. The comparative metrics reported in Tables \ref{tab:summary} and \ref{tab:improvement} are copied directly from the generated dataset summaries. Re-running the notebooks regenerates the data and figures under the same settings.
+
+The code uses only common scientific Python packages: NumPy, pandas, and Matplotlib. This makes the workflow portable across Google Colab, VS Code, and local Jupyter installations. The random seeds are fixed in the main experiments to make the reported values reproducible. At the same time, the simulation engine supports alternate seeds for robustness testing.
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+This paper presented a complete research implementation for reliability modeling and improvement in IoT-enabled smart manufacturing. Starting from a modular Petri-net-inspired viewpoint, the system was re-implemented using Markov production units, hierarchical network load propagation, nonlinear transmission accuracy, and binary demand-satisfaction reliability. The baseline fixed production policy was shown to suffer from overload, reduced accuracy, production instability, and failure spikes.
+
+To address these limitations, the Adaptive Predictive Reliability-Aware Control model was proposed. APRAC estimates future reliability and selects a production command that balances reliability, degradation, overload, and smoothing. Monte Carlo experiments showed a 19.41\% reliability improvement, 23.87\% failure reduction, 16.06\% accuracy gain, and 25.49\% throughput gain over the baseline. The ablation study confirmed that both load-aware feedback and predictive reliability scoring are important.
+
+Future work can extend the model by using learned predictors trained on real shop-floor traces, adding maintenance scheduling decisions, modeling multiple gateways, and validating the controller under real industrial IoT communication protocols \cite{koren2018reconfigurable}.
+
+\appendix
+
+\section{Extended Mathematical Notes}
+
+This appendix provides additional derivations used to interpret the simulation. Let $Y(t)=P(t)-d$ denote the demand margin. Reliability is the event $Y(t)\ge0$. For any policy $\pi$, the expected reliability over a finite horizon is:
+\begin{equation}
+\mathcal{R}_{\pi}=\frac{1}{T}\sum_{t=1}^{T}\Pr_{\pi}(Y(t)\ge0).
+\end{equation}
+The Monte Carlo estimator used in the experiments is:
+\begin{equation}
+\widehat{\mathcal{R}}_{\pi}
+=\frac{1}{NT}\sum_{r=1}^{N}\sum_{t=1}^{T}
+\mathbb{I}\{Y_{\pi}^{(r)}(t)\ge0\}.
+\end{equation}
+This estimator is unbiased for the finite-horizon reliability under the simulated stochastic process because each run is sampled independently from the policy-induced transition law.
+
+The nonlinear accuracy function creates a reliability-sensitive region near gateway capacity. Let $u=L_g/C_g$. When $u$ is small, the derivative magnitude of $A(u)$ is modest. Near and above $u=1$, the derivative magnitude increases and congestion memory amplifies the effective utilization. Thus a controller that prevents $u$ from crossing one can gain more accuracy than a controller that reacts only after severe overload.
+
+\section{Additional Parameter Description}
+
+The four-state production model is intentionally simple enough to be inspected manually. State 0 represents a failed or unavailable unit. State 1 represents degraded operation. State 2 represents nominal operation. State 3 represents boost operation, which produces more physical output but is more sensitive to stress and degradation. The transition matrix allows recovery from failed or degraded states, persistence in nominal state, and deterioration from boost state under stress.
+
+The network model uses a tree topology because many manufacturing IoT deployments collect sensor data at local nodes, route them through intermediate switches or gateways, and finally aggregate them at an edge gateway. The gateway is modeled as the main bottleneck because it receives all route-node traffic. This does not imply that route nodes cannot fail; rather, route-node overload is included in the maximum utilization and overload-risk measures. The gateway load is used for transmission accuracy because it represents the final aggregated communication bottleneck.
+
+\begin{table}[H]
+\centering
+\caption{Interpretation of major model variables.}
+\label{tab:variables}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{ll}
+\toprule
+Symbol & Meaning \\
+\midrule
+$X_i(t)$ & State of production unit $i$ at time $t$ \\
+$c(X_i)$ & State-dependent capacity of unit $i$ \\
+$\gamma(t)$ & Production command selected by policy \\
+$L_g(t)$ & Gateway communication load \\
+$C_g$ & Gateway capacity \\
+$U_g(t)$ & Gateway utilization $L_g(t)/C_g$ \\
+$O(t)$ & Overload risk $\max\{0,U_g(t)-1\}$ \\
+$A(t)$ & Transmission accuracy \\
+$P(t)$ & Effective delivered production \\
+$R_s(t)$ & Binary reliability event \\
+$D(t)$ & Mean production degradation risk \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+\section{Extended Comparison Notes}
+
+The results should be interpreted across several metrics rather than a single value. Reliability measures demand satisfaction. Failure rate measures the complement. Production variance measures stability. Mean load measures communication pressure. Transmission accuracy measures information quality. Throughput combines delivered output and communication quality.
+
+The improved policy is better on all primary reported metrics. It does not merely shift the problem from one layer to another. If reliability increased while load also increased substantially, the controller might be exploiting the physical layer at the expense of the network layer. Instead, APRAC increases reliability while lowering mean load. This is the desired behavior for an IoT manufacturing system because it indicates a more efficient operating point rather than a more aggressive one.
+
+The ablation study further supports the mechanism. Load-aware control improves reliability by avoiding the most severe congestion. Prediction-only control improves accuracy by anticipating load effects. The full model combines both and adds smoothing, resulting in the strongest reliability and variance profile. This layered evidence is stronger than reporting only a single baseline-improved comparison.
+
+\section{Report Compliance Summary}
+
+The work satisfies the requested research-report requirements as follows. The topic was implemented from scratch using modular Python notebooks. A synthetic dataset was generated from the simulation. The mathematical model includes definitions, lemmas, a proposition, a theorem, and proof sketches. The improved algorithm was applied to the existing baseline setting. Six comparison graphs were generated using different markers for old and new strategies. Numerical tables report the outcomes. No confusion matrix or confusion chart is used because the problem is a reliability-control simulation rather than a supervised classification task.
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}

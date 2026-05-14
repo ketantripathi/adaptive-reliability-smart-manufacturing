@@ -1,0 +1,68 @@
+\documentclass[10pt,a4paper]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{float}
+\usepackage{hyperref}
+\usepackage{caption}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{setspace}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    citecolor=blue,
+    urlcolor=blue
+}
+
+\begin{document}
+
+\begin{table}[H]
+\centering
+\caption{Contribution Distribution}
+\label{tab:contributions}
+\begin{tabular}{@{}p{0.25\textwidth}p{0.35\textwidth}p{0.35\textwidth}@{}}
+\toprule
+\textbf{Member} & \textbf{Roll Number} & \textbf{Responsibilities} \\
+\midrule
+Ketan Tripathi & BT22CSE113 & 
+\begin{itemize}[leftmargin=*]
+    \item System Modeling (01\_system\_modeling.ipynb)
+    \item Proposed Model Development (05\_proposed\_model.ipynb)
+    \item Network Model Implementation (core/network\_model.py)
+    \item Research Paper Introduction and Related Work Sections
+\end{itemize} \\
+\midrule
+Amrit Lal Saket & BT22CSE048 & 
+\begin{itemize}[leftmargin=*]
+    \item Baseline Simulation (02\_baseline\_simulation.ipynb)
+    \item Improved Simulation (06\_improved\_simulation.ipynb)
+    \item Production Model Implementation (core/production\_model.py)
+    \item Research Paper Methodology Section
+\end{itemize} \\
+\midrule
+Prabhat Kumar Prince & BT22CSE109 & 
+\begin{itemize}[leftmargin=*]
+    \item Dataset Generation (03\_dataset\_generation.ipynb)
+    \item Comparative Analysis (07\_comparative\_analysis.ipynb)
+    \item Reliability Model Implementation (core/reliability\_model.py)
+    \item Research Paper Results and Discussion Sections
+\end{itemize} \\
+\midrule
+Mehtab Singh Rathore & BT22CSE123 & 
+\begin{itemize}[leftmargin=*]
+    \item Limitation Analysis (04\_limitation\_analysis.ipynb)
+    \item Ablation Study (08\_ablation\_study.ipynb)
+    \item Simulation Engine Implementation (core/simulation\_engine.py)
+    \item Research Paper Conclusion and Abstract
+    \item Overall Project Coordination and LaTeX Compilation
+\end{itemize} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\end{document}
